@@ -2,15 +2,20 @@ import requests
 import pymongo
 import time
 import json
+import os
 from datetime import datetime, timezone
+from dotenv import load_dotenv  # Import dotenv
 
-# MongoDB Configuration
-MONGO_URI = "mongodb://localhost:27017/"
-DB_NAME = "redditTracker"
-COLLECTION_NAME = "redditPosts"
+# Load environment variables from .env file
+load_dotenv()
+
+# MongoDB Configuration (Load from .env)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+DB_NAME = os.getenv("DB_NAME", "redditTracker")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "redditPosts")
 
 # Define the subreddit to scrape
-SUBREDDIT = "technology"
+SUBREDDIT = os.getenv("SUBREDDIT", "technology")
 URL = f"https://www.reddit.com/r/{SUBREDDIT}/hot.json"
 
 # Headers to mimic a browser request
@@ -71,7 +76,6 @@ def save_to_mongodb(posts):
 
 if __name__ == "__main__":
     posts = fetch_reddit_posts()
-    #print(posts)
     saved_posts = save_to_mongodb(posts)
 
     # Convert ObjectId to string before returning JSON response
