@@ -1,0 +1,96 @@
+/* Container */
+.posts-container {
+  padding: 20px;
+  max-width: 900px;
+  margin: auto;
+  background-color: #181818;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+}
+
+/* Header */
+.posts-header {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 20px;
+  color: #fff;
+}
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.select-dropdown {
+  width: 250px;
+}
+
+/* Buttons */
+.filter-button, .clear-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: 0.3s ease-in-out;
+}
+
+.clear-button {
+  background-color: #ff4c4c;
+}
+
+.filter-button:hover {
+  background-color: #0056b3;
+}
+
+.clear-button:hover {
+  background-color: #c82333;
+}
+
+/* Post List */
+.posts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Post Card */
+.post-card {
+  background-color: #222;
+  padding: 15px;
+  border-radius: 6px;
+  transition: 0.3s;
+}
+
+.post-card:hover {
+  background-color: #333;
+}
+
+/* Post Title */
+.post-title {
+  color: #1e90ff;
+  font-size: 18px;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.post-title:hover {
+  text-decoration: underline;
+}
+
+/* Meta Information */
+.post-meta {
+  margin-top: 5px;
+  color: #bbb;
+  font-size: 14px;
+}
+
+.post-author, .post-comments {
+  margin-right: 10px;
+}
