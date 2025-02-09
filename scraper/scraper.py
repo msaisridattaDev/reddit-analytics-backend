@@ -66,6 +66,15 @@ def save_to_mongodb(posts):
         if existing_post:
             post["_id"] = str(existing_post["_id"])  # Convert ObjectId to string
         else:
+            try:
+                client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+                client.server_info()  # This will raise an error if MongoDB is not reachable
+                db = client[DB_NAME]
+                collection = db[COLLECTION_NAME]
+            except Exception as e:
+                print(json.dumps({"error": f"MongoDB Connection Failed: {str(e)}"}))  # Ensure JSON Output
+                return []
+
             inserted = collection.insert_one(post)
             post["_id"] = str(inserted.inserted_id)
         saved_posts.append(post)
@@ -75,8 +84,13 @@ def save_to_mongodb(posts):
 
 
 if __name__ == "__main__":
-    posts = fetch_reddit_posts()
-    saved_posts = save_to_mongodb(posts)
+    try:
+        posts = fetch_reddit_posts()
+        saved_posts = save_to_mongodb(posts)
 
-    # Convert ObjectId to string before returning JSON response
-    print(json.dumps({"scraped_posts": saved_posts}, default=str))  # FIXED
+        # Ensure only JSON output is printed
+        output = {"scraped_posts": saved_posts}
+        print(json.dumps(output, default=str))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))  # Ensures JSON even on error
+
