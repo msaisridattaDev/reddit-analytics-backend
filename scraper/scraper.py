@@ -1,94 +1,91 @@
-import requests
-import pymongo
-import json
-import os
-from datetime import datetime, timezone
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
+import os
+import requests
+import json
+import random
+from dotenv import load_dotenv
+from pymongo import MongoClient
+
+# Load environment variables
 load_dotenv()
 
-# MongoDB Configuration (Load from .env)
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
-DB_NAME = os.getenv("DB_NAME", "redditTracker")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME", "redditPosts")
+# MongoDB Config
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("DB_NAME")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
-# Define the subreddit to scrape
-SUBREDDIT = os.getenv("SUBREDDIT", "technology")
-URL = f"https://www.reddit.com/r/{SUBREDDIT}/hot.json"
+# ScraperAPI Config
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY")
+SUBREDDIT = os.getenv("SUBREDDIT")
+SCRAPER_URL = f"https://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url=https://www.reddit.com/r/{SUBREDDIT}/hot.json"
 
-# Headers to mimic a browser request
+# Rotating User-Agent list
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0"
+]
+
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Safari/537.36",
+    "User-Agent": random.choice(USER_AGENTS),
     "Accept": "application/json",
-    "Referer": "https://www.reddit.com",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive"
 }
 
 def fetch_reddit_posts():
-    """Fetch hot posts from a subreddit."""
+    """Scrape hot posts from Reddit using ScraperAPI."""
     try:
-        response = requests.get(URL, headers=HEADERS)
+        response = requests.get(SCRAPER_URL, headers=HEADERS, timeout=10)
 
         if response.status_code != 200:
-            return {"error": f"HTTP Error: {response.status_code}", "posts": []}
+            print(f"❌ Failed to fetch data: {response.status_code}")
+            return []
 
         data = response.json()
         posts = data.get("data", {}).get("children", [])
 
-        extracted_posts = [
-            {
-                "title": post["data"]["title"],
-                "score": post["data"]["score"],
-                "author": post["data"]["author"],
-                "url": post["data"]["url"],
-                "num_comments": post["data"]["num_comments"],
-                "created_utc": datetime.fromtimestamp(post["data"]["created_utc"], timezone.utc).isoformat(),
-                "subreddit": SUBREDDIT,
-            }
-            for post in posts
-        ]
+        extracted_posts = []
+        for post in posts:
+            post_data = post["data"]
+            extracted_posts.append({
+                "title": post_data["title"],
+                "score": post_data["score"],
+                "author": post_data["author"],
+                "url": post_data["url"],
+                "num_comments": post_data["num_comments"],
+                "created_utc": post_data["created_utc"],
+                "subreddit": SUBREDDIT
+            })
 
-        return {"posts": extracted_posts}
+        return extracted_posts
 
-    except Exception as e:
-        return {"error": str(e), "posts": []}
+    except requests.exceptions.RequestException as e:
+        print(f"❌ ScraperAPI request failed: {e}")
+        return []
 
-def save_to_mongodb(posts):
-    """Save posts to MongoDB and return the inserted documents."""
-    if not posts:
-        return {"error": "No posts fetched.", "saved_posts": []}
-
+def save_to_mongo(posts):
+    """Save scraped posts to MongoDB."""
     try:
-        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
         collection = db[COLLECTION_NAME]
 
-        saved_posts = []
-        for post in posts:
-            existing_post = collection.find_one({"url": post["url"]})
-            if existing_post:
-                post["_id"] = str(existing_post["_id"])  # Convert ObjectId to string
-            else:
-                inserted = collection.insert_one(post)
-                post["_id"] = str(inserted.inserted_id)
+        if not posts:
+            print("⚠️ No posts to save.")
+            return
 
-            saved_posts.append(post)
-
-        client.close()
-        return {"saved_posts": saved_posts}
+        collection.insert_many(posts)
+        print("✅ Data saved to MongoDB.")
 
     except Exception as e:
-        return {"error": f"MongoDB Connection Failed: {str(e)}", "saved_posts": []}
+        print(f"❌ MongoDB Error: {e}")
 
 if __name__ == "__main__":
-    try:
-        result = fetch_reddit_posts()
+    posts = fetch_reddit_posts()
 
-        if "error" in result:
-            print(json.dumps(result))  # Log errors in JSON format
-        else:
-            saved_result = save_to_mongodb(result["posts"])
-            print(json.dumps(saved_result))  # Ensure JSON output
-
-    except Exception as e:
-        print(json.dumps({"error": str(e)}))  # Ensure JSON output even on failure
+    if posts:
+        print(json.dumps({"scraped_posts": posts}, indent=4))
+        save_to_mongo(posts)
+    else:
+        print("⚠️ No posts fetched.")
