@@ -1,23 +1,19 @@
-
-import os
 import requests
 import json
 import random
-from dotenv import load_dotenv
-from pymongo import MongoClient
+import time
+import os
+import sys
 
-# Load environment variables
-load_dotenv()
+# Ensure UTF-8 encoding to prevent Unicode errors
+sys.stdout.reconfigure(encoding='utf-8')
 
-# MongoDB Config
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("DB_NAME")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
+# Load API Key and subreddit from environment variables
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "8de8a1d3256c1c88ffff4f70ccf04e5a")  # Ensure this is set in .env
+SUBREDDIT = os.getenv("SUBREDDIT", "technology")  # Default to 'technology'
 
-# ScraperAPI Config
-SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY")
-SUBREDDIT = os.getenv("SUBREDDIT")
-SCRAPER_URL = f"https://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url=https://www.reddit.com/r/{SUBREDDIT}/hot.json"
+# Construct ScraperAPI URL with &render=true for better scraping
+SCRAPER_URL = f"https://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url=https://www.reddit.com/r/{SUBREDDIT}/hot.json&render=true"
 
 # Rotating User-Agent list
 USER_AGENTS = [
@@ -30,62 +26,69 @@ HEADERS = {
     "User-Agent": random.choice(USER_AGENTS),
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive"
+    "Connection": "keep-alive",
+    "Referer": "https://www.reddit.com",
+    "Origin": "https://www.reddit.com",
+    "Sec-Fetch-Site": "same-origin"
 }
 
-def fetch_reddit_posts():
-    """Scrape hot posts from Reddit using ScraperAPI."""
-    try:
-        response = requests.get(SCRAPER_URL, headers=HEADERS, timeout=10)
+def fetch_reddit_posts(retries=3):
+    """Scrape hot posts from Reddit using ScraperAPI with retries and error handling."""
+    for attempt in range(retries):
+        try:
+            response = requests.get(SCRAPER_URL, headers=HEADERS, timeout=30)
 
-        if response.status_code != 200:
-            print(f"❌ Failed to fetch data: {response.status_code}")
-            return []
+            if response.status_code == 401:
+                print("❌ Unauthorized request: Check your API key and access permissions.")
+                return []
 
-        data = response.json()
-        posts = data.get("data", {}).get("children", [])
+            if response.status_code != 200:
+                print(f"❌ Failed to fetch data (Attempt {attempt + 1}): {response.status_code} - {response.text}")
+                time.sleep(5)  # Wait before retrying
+                continue
 
-        extracted_posts = []
-        for post in posts:
-            post_data = post["data"]
-            extracted_posts.append({
-                "title": post_data["title"],
-                "score": post_data["score"],
-                "author": post_data["author"],
-                "url": post_data["url"],
-                "num_comments": post_data["num_comments"],
-                "created_utc": post_data["created_utc"],
-                "subreddit": SUBREDDIT
-            })
+            try:
+                data = response.json()
+            except json.JSONDecodeError:
+                print(f"⚠️ JSON Parsing Error (Attempt {attempt + 1}): Response is not valid JSON.")
+                time.sleep(5)
+                continue
 
-        return extracted_posts
+            if "data" not in data:
+                print(f"⚠️ Unexpected response format (Attempt {attempt + 1}), retrying...")
+                time.sleep(5)
+                continue
 
-    except requests.exceptions.RequestException as e:
-        print(f"❌ ScraperAPI request failed: {e}")
-        return []
+            posts = data["data"].get("children", [])
+            extracted_posts = [
+                {
+                    "title": post["data"]["title"],
+                    "score": post["data"]["score"],
+                    "author": post["data"]["author"],
+                    "url": post["data"]["url"],
+                    "num_comments": post["data"]["num_comments"],
+                    "created_utc": post["data"]["created_utc"],
+                    "subreddit": SUBREDDIT
+                }
+                for post in posts
+            ]
+            return extracted_posts
 
-def save_to_mongo(posts):
-    """Save scraped posts to MongoDB."""
-    try:
-        client = MongoClient(MONGO_URI)
-        db = client[DB_NAME]
-        collection = db[COLLECTION_NAME]
+        except requests.exceptions.Timeout:
+            print(f"⏳ Request timed out (Attempt {attempt + 1}), retrying...")
+            time.sleep(5)
 
-        if not posts:
-            print("⚠️ No posts to save.")
-            return
+        except requests.exceptions.RequestException as e:
+            print(f"❌ ScraperAPI request failed (Attempt {attempt + 1}): {e}")
+            time.sleep(5)
 
-        collection.insert_many(posts)
-        print("✅ Data saved to MongoDB.")
-
-    except Exception as e:
-        print(f"❌ MongoDB Error: {e}")
+    print("⚠️ Scraping failed after multiple attempts.")
+    return []
 
 if __name__ == "__main__":
     posts = fetch_reddit_posts()
 
     if posts:
-        print(json.dumps({"scraped_posts": posts}, indent=4))
-        save_to_mongo(posts)
+        print(json.dumps({"scraped_posts": posts}, indent=4, ensure_ascii=False))  # Ensure correct encoding
     else:
         print("⚠️ No posts fetched.")
