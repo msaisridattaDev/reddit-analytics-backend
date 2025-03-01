@@ -9,7 +9,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Load API Key and subreddit from environment variables
-SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "8de8a1d3256c1c88ffff4f70ccf04e5a")  # Ensure this is set in .env
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "6eb17876e00d1b856bd34f49a0a8a15c")  # Ensure this is set in .env
 SUBREDDIT = os.getenv("SUBREDDIT", "technology")  # Default to 'technology'
 
 # Construct ScraperAPI URL with &render=true for better scraping
