@@ -34,28 +34,30 @@ HEADERS = {
 
 def fetch_reddit_posts(retries=3):
     """Scrape hot posts from Reddit using ScraperAPI with retries and error handling."""
+    errors = []  # Store errors for better debugging
+
     for attempt in range(retries):
         try:
             response = requests.get(SCRAPER_URL, headers=HEADERS, timeout=30)
 
             if response.status_code == 401:
-                print("❌ Unauthorized request: Check your API key and access permissions.")
-                return []
+                errors.append("❌ Unauthorized request: Check API key and access permissions.")
+                return {"error": errors}
 
             if response.status_code != 200:
-                print(f"❌ Failed to fetch data (Attempt {attempt + 1}): {response.status_code} - {response.text}")
-                time.sleep(5)  # Wait before retrying
+                errors.append(f"❌ Failed to fetch data (Attempt {attempt + 1}): {response.status_code}")
+                time.sleep(5)
                 continue
 
             try:
                 data = response.json()
             except json.JSONDecodeError:
-                print(f"⚠️ JSON Parsing Error (Attempt {attempt + 1}): Response is not valid JSON.")
+                errors.append(f"⚠️ JSON Parsing Error (Attempt {attempt + 1}): Invalid response.")
                 time.sleep(5)
                 continue
 
             if "data" not in data:
-                print(f"⚠️ Unexpected response format (Attempt {attempt + 1}), retrying...")
+                errors.append(f"⚠️ Unexpected response format (Attempt {attempt + 1})")
                 time.sleep(5)
                 continue
 
@@ -72,23 +74,24 @@ def fetch_reddit_posts(retries=3):
                 }
                 for post in posts
             ]
-            return extracted_posts
+
+            return {"scraped_posts": extracted_posts}  # ✅ Always return a valid JSON object
 
         except requests.exceptions.Timeout:
-            print(f"⏳ Request timed out (Attempt {attempt + 1}), retrying...")
+            errors.append(f"⏳ Request timed out (Attempt {attempt + 1})")
             time.sleep(5)
 
         except requests.exceptions.RequestException as e:
-            print(f"❌ ScraperAPI request failed (Attempt {attempt + 1}): {e}")
+            errors.append(f"❌ ScraperAPI request failed (Attempt {attempt + 1}): {str(e)}")
             time.sleep(5)
 
-    print("⚠️ Scraping failed after multiple attempts.")
-    return []
+    return {"error": errors}  # ✅ Ensure valid JSON response even on failure
 
 if __name__ == "__main__":
-    posts = fetch_reddit_posts()
+    try:
+        result = fetch_reddit_posts()
 
-    if posts:
-        print(json.dumps({"scraped_posts": posts}, indent=4, ensure_ascii=False))  # Ensure correct encoding
-    else:
-        print("⚠️ No posts fetched.")
+        print(json.dumps(result, indent=4, ensure_ascii=False))  # ✅ Always a single valid JSON output
+
+    except Exception as e:
+        print(json.dumps({"error": f"❌ Critical Error in scraper: {str(e)}"}))
